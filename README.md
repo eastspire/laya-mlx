@@ -254,6 +254,60 @@ to keep in mind:
 If you need per-caller identity, put a reverse proxy in front rather than
 modifying this service.
 
+### One-shot CLI
+
+> **Fork addition, not upstream.** `laya-mlx-decide` ships with this fork only.
+
+`laya-mlx-serve` is not the only way to call a checkpoint. When the process
+should exit rather than hold a port — from cron, a shell script, a Makefile, or
+another program's `subprocess` — use the one-shot CLI:
+
+```bash
+laya-mlx-decide \
+  --model ./models/laya-multilingual \
+  --state '发票被重复扣款，请退款。' \
+  --preset triage \
+  --compact
+```
+
+```
+intent: refund ({'refund': 0.9955, 'technical_help': 0.0003, ...})
+is_urgent: 0.0998
+frustration: 1.853 of 4
+refund_requested: 0.9259
+churn_risk: 0.7880
+```
+
+`--preset` takes the same presets as the HTTP service. Without it, pass
+`--questions` with inline JSON or `--questions-file` with a path. State comes
+from `--state`, `--state-file`, or stdin:
+
+```bash
+echo 'I want a refund for the double charge' | laya-mlx-decide \
+  --model ./models/laya-multilingual \
+  --questions '{"refund": {"type": "noul", "instructions": "Is a refund requested?"}}'
+```
+
+Output is JSON on stdout by default, or one answer per line with `--compact`.
+Exit codes are `0` success, `2` bad usage or an invalid question, `3` an
+unusable checkpoint or a model failure — so `set -e` behaves.
+
+`--describe` prints checkpoint metadata (layout, dtype, weight size) and exits
+without loading any weights, which takes about 0.25 s.
+
+**The tradeoff is real: this re-reads the weights on every call.** Measured on
+an M-series Mac with the multilingual checkpoint, three sequential decisions
+took 2.29 s one-shot versus 0.075 s against a resident service — roughly 765 ms
+per invocation against 25 ms. Weight loading dominates completely. Use the CLI
+for occasional or scripted decisions; use the service when you are making many
+calls or need concurrency.
+
+A flattened desktop download works here too, same as the service:
+
+```bash
+laya-mlx-decide --model ~/.lmstudio/models/aac6fef/laya-mlx --describe
+```
+
 ### Flattened checkpoint directories
 
 `laya.load` expects the Hugging Face layout: `encoder/config.json` plus a
