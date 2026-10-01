@@ -192,6 +192,74 @@ print(result["shortlist"])  # which labels were kept, with cosine scores
 
 A dedicated bi-encoder passed as `embed_fn` usually shortlists better than the decision checkpoint's own encoder. Probabilities on a shortlisted choice are over the kept labels only.
 
+## HTTP service
+
+> **Fork addition, not upstream.** `laya_mlx/service/` is contributed by
+> [eastspire/laya-mlx](https://github.com/eastspire/laya-mlx). It is absent from
+> the PyPI `laya-mlx` wheel and from upstream `mizorewww/laya-mlx`. Install this
+> fork (`pip install 'git+https://github.com/eastspire/laya-mlx.git'`) to get it.
+
+Serve a local checkpoint so other models, scripts or agents can reach it without
+importing `laya_mlx` or knowing where the weights live. Standard library only —
+no web framework dependency.
+
+```bash
+laya-mlx-serve \
+  --checkpoint english=./models/laya \
+  --checkpoint multilingual=./models/laya-multilingual \
+  --preload english,multilingual
+```
+
+```bash
+curl -X POST localhost:8080/predict \
+  -H 'Content-Type: application/json' \
+  -d '{"state": {"message": "发票被重复扣款，请退款。"}, "preset": "triage"}'
+```
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /predict` | `state` + `questions` (or `preset`) → typed answers |
+| `POST /route` | same, choosing the checkpoint from the input's script |
+| `POST /shortlist` | a large label set, embedding-filtered to top-k before scoring |
+| `GET /health` | liveness, resident checkpoints, per-checkpoint metadata |
+| `GET /presets` | names of the bundled question presets |
+
+`preset` accepts `triage`, `email`, `guard`, `moderation` or `router` instead of a
+hand-written `questions` object. Omitting `checkpoint` routes on the input's
+script, exactly as the library `Router` does. A flattened desktop download (see
+below) is re-linked into Hub layout automatically, by symlink, without copying
+weights.
+
+Two operational notes, both measured on an M-series Mac:
+
+- **The listen backlog is raised to 128.** `socketserver` defaults to 5, so a
+  client burst above that is reset at the TCP layer before any request is
+  served — 8 concurrent clients lost 65% of requests on stock settings.
+- **Inference is bounded** by `--max-inflight` (default 16). MLX serialises GPU
+  work regardless; callers past the bound wait `--queue-timeout` seconds and
+  then receive a 503 rather than queueing without limit.
+
+The service binds `127.0.0.1` and has **no authentication**. Putting it on a
+network interface with `--host 0.0.0.0` exposes the checkpoints to every client
+that can reach the port; front it with a reverse proxy that authenticates.
+
+### Flattened checkpoint directories
+
+`laya.load` expects the Hugging Face layout: `encoder/config.json` plus a
+`tokenizer/` subdirectory. Some desktop tools flatten the download into a single
+directory with a top-level `config.json` and `tokenizer.json`, which
+`resolve_model` rejects with `Not a complete Laya checkpoint` even though every
+required file is present.
+
+```python
+from laya_mlx.service import resolve_checkpoint
+
+agent = laya.load(str(resolve_checkpoint("~/.lmstudio/models/aac6fef/laya-mlx")))
+```
+
+`resolve_checkpoint` returns a directory `laya.load` accepts, building a sibling
+`<name>_hub` of symlinks on first use. The original directory is never modified.
+
 ## Command line
 
 ```bash
