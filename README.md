@@ -239,9 +239,20 @@ Two operational notes, both measured on an M-series Mac:
   work regardless; callers past the bound wait `--queue-timeout` seconds and
   then receive a 503 rather than queueing without limit.
 
-The service binds `127.0.0.1` and has **no authentication**. Putting it on a
-network interface with `--host 0.0.0.0` exposes the checkpoints to every client
-that can reach the port; front it with a reverse proxy that authenticates.
+The service binds `127.0.0.1` and has **no authentication** — this is a
+deliberate choice, not an unfinished feature. Any process on the machine can
+call it; it trusts the network boundary rather than credentials. Two consequences
+to keep in mind:
+
+- `--host 0.0.0.0` publishes the checkpoints to every client that can reach the
+  port, with no credential check of any kind. Only do that on a network you
+  already trust, or behind a proxy that authenticates.
+- Request bodies are still validated before inference, and the in-flight bound
+  still applies, so a caller cannot crash the server or exhaust the GPU. What is
+  missing is authorization, not robustness.
+
+If you need per-caller identity, put a reverse proxy in front rather than
+modifying this service.
 
 ### Flattened checkpoint directories
 
