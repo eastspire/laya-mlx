@@ -9,6 +9,8 @@ weights live.
 """
 
 from .checkpoint import CheckpointError, describe, link_flat_checkpoint, resolve_checkpoint
+from .decide import format_answers
+from .decide import main as decide_main
 from .http import PRESETS, BusyError, Handler, Server, ServiceError, build_server
 from .registry import ENGLISH, MULTILINGUAL, Registry
 
@@ -23,7 +25,9 @@ __all__ = [
     "Server",
     "ServiceError",
     "build_server",
+    "decide_main",
     "describe",
+    "format_answers",
     "link_flat_checkpoint",
     "resolve_checkpoint",
 ]
